@@ -504,16 +504,44 @@ def cmd_init():
             print(f"✅ Configured {name}")
     print("\n✨ Initialization complete!")
 
+def cmd_status():
+    print("🔍 VioraEDA-MCP System Status")
+    viora_path = get_viora_executable()
+    
+    if shutil.which(viora_path) or os.path.exists(viora_path):
+        print(f"✅ VioraEDA Binary: Found at {viora_path}")
+        try:
+            res = subprocess.run([viora_path, "--version"], capture_output=True, text=True, timeout=2)
+            version = res.stdout.strip() or res.stderr.strip() or "unknown"
+            print(f"✅ Engine Version: {version}")
+        except Exception as e:
+            print(f"⚠️ Engine Version: Could not determine ({e})")
+    else:
+        print("❌ VioraEDA Binary: NOT FOUND")
+        print("   Please ensure 'viora' or 'viospice' is in your system PATH.")
+
 def main():
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(dest="command")
-    subparsers.add_parser("run")
-    subparsers.add_parser("init")
+    parser = argparse.ArgumentParser(
+        description="VioraEDA MCP Server - AI Bridge for Circuit Design",
+        epilog="Examples:\n  vioraeda-mcp init    # Configure AI agents\n  vioraeda-mcp run     # Start the MCP server (stdio)\n  vioraeda-mcp status  # Check system readiness",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+    subparsers.add_parser("run", help="Start the MCP server using stdio transport (default)")
+    subparsers.add_parser("init", help="Configure local AI agents to use this server")
+    subparsers.add_parser("status", help="Check VioraEDA binary installation and version")
+    
     args = parser.parse_args()
+    
     if args.command == "init":
         cmd_init()
-    else:
+    elif args.command == "status":
+        cmd_status()
+    elif args.command == "run" or args.command is None:
         cmd_run()
+    else:
+        parser.print_help()
 
 if __name__ == "__main__":
     main()
