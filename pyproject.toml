@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vioraeda-mcp"
+version = "0.1.0"
+description = "A Model Context Protocol (MCP) server for VioraEDA, providing specialized tools and memory management."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Janada Sroor", email = "janadasroor@gmail.com" }
+]
+dependencies = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0.0"
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0"
+]
+
+[project.scripts]
+vioraeda-mcp = "vioraeda_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vioraeda_mcp"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N"]
+ignore = ["E722"]
