@@ -246,6 +246,16 @@ def viora_symbol_validate(file: str) -> dict:
     return run_viora_command(["symbol-validate", file, "--json"], json_out=True)
 
 @mcp.tool()
+def viora_symbol_from_subckt(file: str, out_dir: str, name: Optional[str] = None) -> dict:
+    """Generate Viora symbols (.viosym) from SPICE .subckt definitions.
+    This creates a visual symbol with automatic pin placement and mapping.
+    """
+    args = ["symbol-from-subckt", file, out_dir, "--json"]
+    if name:
+        args.extend(["--name", name])
+    return run_viora_command(args, json_out=True)
+
+@mcp.tool()
 def viora_bom_generate(file: str) -> dict:
     """Generate a Bill of Materials (BOM) from a schematic."""
     res = run_viora_command(["schematic-query", file, "--json"], json_out=True)
