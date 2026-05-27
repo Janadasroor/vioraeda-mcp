@@ -1,5 +1,4 @@
 import argparse
-import asyncio
 import json
 import logging
 import os
@@ -7,10 +6,10 @@ import re
 import shutil
 import subprocess
 import sys
-import threading
 import tempfile
+import threading
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP, Image
 
@@ -179,12 +178,16 @@ def viora_schematic_query(file: str) -> dict:
 @mcp.tool()
 def viora_flux_run(file: str = None, code: str = None, t: float = None, inputs: list = None) -> dict:
     """Execute automation logic via FluxScript."""
-    if file: args = ["flux", "run", file]
+    if file:
+        args = ["flux", "run", file]
     elif code:
         args = ["flux", "eval", code, "--json"]
-        if t is not None: args.extend(["--time", str(t)])
-        if inputs: args.extend(["--inputs", ",".join(map(str, inputs))])
-    else: return {"ok": False, "error": "Missing file or code"}
+        if t is not None:
+            args.extend(["--time", str(t)])
+        if inputs:
+            args.extend(["--inputs", ",".join(map(str, inputs))])
+    else:
+        return {"ok": False, "error": "Missing file or code"}
     return run_viora_command(args, json_out=True)
 
 @mcp.tool()
@@ -235,40 +238,54 @@ def viospice_netlist_run(
         os.close(fd)
         Path(temp_file).write_text(cir, encoding="utf-8")
         args.append(temp_file)
-    elif file: args.append(file)
-    else: return {"ok": False, "error": "No file or netlist provided"}
+    elif file:
+        args.append(file)
+    else:
+        return {"ok": False, "error": "No file or netlist provided"}
 
-    if analysis: args.extend(["--analysis", analysis])
-    if stop: args.extend(["--stop", stop])
-    if step: args.extend(["--step", step])
+    if analysis:
+        args.extend(["--analysis", analysis])
+    if stop:
+        args.extend(["--stop", stop])
+    if step:
+        args.extend(["--step", step])
     if signals:
-        for s in signals: args.extend(["--signal", s])
-    if robust: args.append("--robust")
-    if compat: args.append("--compat")
+        for s in signals:
+            args.extend(["--signal", s])
+    if robust:
+        args.append("--robust")
+    if compat:
+        args.append("--compat")
 
-    try: return run_viora_command(args, json_out=True)
+    try:
+        return run_viora_command(args, json_out=True)
     finally:
-        if temp_file and os.path.exists(temp_file): os.remove(temp_file)
+        if temp_file and os.path.exists(temp_file):
+            os.remove(temp_file)
 
 @mcp.tool()
 def viospice_netlist_validate(file: str = None, cir: str = None) -> dict:
     """Validate a SPICE netlist without running simulation."""
     args = ["netlist-validate", "--json"]
-    if file: args.append(file)
+    if file:
+        args.append(file)
     elif cir:
         fd, temp_file = tempfile.mkstemp(suffix=".cir")
         os.close(fd)
         Path(temp_file).write_text(cir, encoding="utf-8")
         args.append(temp_file)
-        try: return run_viora_command(args, json_out=True)
-        finally: os.remove(temp_file)
+        try:
+            return run_viora_command(args, json_out=True)
+        finally:
+            os.remove(temp_file)
     return run_viora_command(args, json_out=True)
 
 @mcp.tool()
 def viospice_netlist_to_schematic(file: str, out: str = None) -> dict:
     """Convert a SPICE netlist (.cir) into a Viora schematic (.flxsch)."""
     args = ["netlist-to-schematic", file]
-    if out: args.extend(["--out", out])
+    if out:
+        args.extend(["--out", out])
     return run_viora_command(args, json_out=True)
 
 @mcp.tool()
@@ -285,7 +302,8 @@ def viospice_raw_export(file: str, out: str, format: str = "json") -> dict:
 def viospice_verilog_inspect(file: str, module: Optional[str] = None) -> dict:
     """Inspect a SystemVerilog file to extract module ports."""
     args = ["verilog-inspect", file, "--json"]
-    if module: args.extend(["--module", module])
+    if module:
+        args.extend(["--module", module])
     return run_viora_command(args, json_out=True)
 
 # --- MCP Tool Definitions: Async Jobs ---
@@ -311,7 +329,8 @@ def viospice_netlist_run_async(
         _jobs[job_id] = {"status": "queued", "result": None}
 
     def _worker():
-        with _job_lock: _jobs[job_id]["status"] = "running"
+        with _job_lock:
+            _jobs[job_id]["status"] = "running"
         try:
             res = viospice_netlist_run(file=file, cir=cir, analysis=analysis, stop=stop, step=step, signals=signals)
             with _job_lock:
@@ -330,7 +349,8 @@ def viospice_job_status(job_id: str) -> dict:
     """Check the status of a background job."""
     with _job_lock:
         job = _jobs.get(job_id)
-        if not job: return {"ok": False, "error": "Job not found"}
+        if not job:
+            return {"ok": False, "error": "Job not found"}
         return {"ok": True, "status": job["status"]}
 
 @mcp.tool()
@@ -338,7 +358,8 @@ def viospice_job_result(job_id: str) -> dict:
     """Retrieve results for a completed job."""
     with _job_lock:
         job = _jobs.get(job_id)
-        if not (job and job["status"] in ("done", "error")): return {"ok": False, "error": "Job not ready"}
+        if not (job and job["status"] in ("done", "error")):
+            return {"ok": False, "error": "Job not ready"}
         res = job["result"]
         del _jobs[job_id]
         return res
@@ -384,7 +405,11 @@ async def viora_ui_load_results(path: str) -> dict:
 @mcp.tool()
 async def viora_ui_get_active_tab() -> dict:
     """Get the active editor tab name."""
-    code = "from PySide6.QtWidgets import QApplication, QTabWidget; print([w.findChild(QTabWidget).tabText(w.findChild(QTabWidget).currentIndex()) for w in QApplication.topLevelWidgets() if w.isVisible() and w.findChild(QTabWidget)][0])"
+    code = (
+        "from PySide6.QtWidgets import QApplication, QTabWidget; "
+        "print([w.findChild(QTabWidget).tabText(w.findChild(QTabWidget).currentIndex()) "
+        "for w in QApplication.topLevelWidgets() if w.isVisible() and w.findChild(QTabWidget)][0])"
+    )
     return await ui_query_async(code)
 
 @mcp.tool()
@@ -393,12 +418,11 @@ def viora_get_docs(topic: str = "all") -> dict:
     exe = get_viora_executable()
     
     # 1. Try to get docs via binary CLI (Source of Truth)
-    # This handles any new help topics added to the binary automatically.
     res = run_viora_command(["help", topic, "--json"], json_out=True)
     if res.get("ok") and res.get("data"):
         return {"ok": True, "source": "binary", "topic": topic, "content": res["data"]}
 
-    # 2. Filesystem Scan (neighboring 'docs' directories)
+    # 2. Filesystem Scan
     exe_path = Path(exe).resolve()
     potential_docs_dirs = [
         exe_path.parent / "docs",
@@ -408,7 +432,6 @@ def viora_get_docs(topic: str = "all") -> dict:
     
     for docs_dir in potential_docs_dirs:
         if docs_dir.exists() and docs_dir.is_dir():
-            # Dynamically discover all .md files in the docs directory
             md_files = {f.stem.lower(): f for f in docs_dir.glob("*.md")}
             
             if topic == "all":
@@ -436,17 +459,18 @@ def viora_get_docs(topic: str = "all") -> dict:
 
 # --- CLI Command Implementations ---
 
-def cmd_run(): mcp.run(transport="stdio")
+def cmd_run():
+    mcp.run(transport="stdio")
 
 def cmd_init():
     print("🔍 Verifying VioraEDA...")
     viora_path = get_viora_executable()
-    cli_path = shutil.which("viospice-cli") or shutil.which("viospice-cli.exe")
 
     if shutil.which(viora_path) or os.path.exists(viora_path):
         print(f"✅ Found viora binary: {viora_path}")
     else:
-        print("❌ viora binary not found."); sys.exit(1)
+        print("❌ viora binary not found.")
+        sys.exit(1)
     
     home = os.path.expanduser("~")
     executable = shutil.which("vioraeda-mcp") or sys.executable + " -m vioraeda_mcp.server"
@@ -475,16 +499,21 @@ def cmd_init():
                     content = f.read()
                     data = json.loads(re.sub(r"//.*", "", content)) if content.strip() else {}
             data.setdefault(info["key"], {})["vioraeda-mcp"] = {"command": executable, "args": []}
-            with open(path, "w") as f: json.dump(data, f, indent=2)
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
             print(f"✅ Configured {name}")
     print("\n✨ Initialization complete!")
 
 def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
-    subparsers.add_parser("run"); subparsers.add_parser("init")
+    subparsers.add_parser("run")
+    subparsers.add_parser("init")
     args = parser.parse_args()
-    if args.command == "init": cmd_init()
-    else: cmd_run()
+    if args.command == "init":
+        cmd_init()
+    else:
+        cmd_run()
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()
