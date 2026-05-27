@@ -217,6 +217,59 @@ def viospice_launch_viewer(file: str, type: str = "plot") -> dict:
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+@mcp.tool()
+def viora_schematic_netlist(
+    file: str,
+    analysis: str = "tran",
+    stop: str = "10m",
+    step: str = "10u",
+    format: str = "spice",
+    out: Optional[str] = None
+) -> dict:
+    """Generate a raw SPICE netlist from a Viora schematic (.flxsch)."""
+    args = ["schematic-netlist", file, "--analysis", analysis, "--stop", stop, "--step", step, "--format", format]
+    if out:
+        args.extend(["--out", out])
+    return run_viora_command(args, json_out=(format == "json"))
+
+@mcp.tool()
+def viora_symbol_import(input_file: str, out_file: str, name: Optional[str] = None) -> dict:
+    """Import external symbols from LTspice (.asy) or KiCad (.kicad_sym)."""
+    args = ["symbol-import", input_file, out_file]
+    if name:
+        args.extend(["--name", name])
+    return run_viora_command(args)
+
+@mcp.tool()
+def viora_symbol_validate(file: str) -> dict:
+    """Check symbol integrity and pin mapping correctness."""
+    return run_viora_command(["symbol-validate", file, "--json"], json_out=True)
+
+@mcp.tool()
+def viora_bom_generate(file: str) -> dict:
+    """Generate a Bill of Materials (BOM) from a schematic."""
+    res = run_viora_command(["schematic-query", file, "--json"], json_out=True)
+    if not res.get("ok"):
+        return res
+    
+    components = res.get("data", {}).get("components", [])
+    bom = []
+    # Group by part/value
+    registry = {}
+    for c in components:
+        key = (c.get("part", "UNKNOWN"), c.get("value", ""))
+        if key not in registry:
+            registry[key] = {"part": key[0], "value": key[1], "quantity": 0, "designators": []}
+        registry[key]["quantity"] += 1
+        registry[key]["designators"].append(c.get("id", "?"))
+    
+    return {
+        "ok": True,
+        "schematic": file,
+        "component_count": len(components),
+        "bom": sorted(list(registry.values()), key=lambda x: x["part"])
+    }
+
 # --- MCP Tool Definitions: Simulation ---
 
 @mcp.tool()
