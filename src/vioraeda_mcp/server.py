@@ -246,10 +246,18 @@ def viora_symbol_validate(file: str) -> dict:
     return run_viora_command(["symbol-validate", file, "--json"], json_out=True)
 
 @mcp.tool()
-def viora_symbol_from_subckt(file: str, out_dir: str, name: Optional[str] = None) -> dict:
+def viora_symbol_from_subckt(file: str, out_dir: Optional[str] = None, name: Optional[str] = None) -> dict:
     """Generate Viora symbols (.viosym) from SPICE .subckt definitions.
     This creates a visual symbol with automatic pin placement and mapping.
+    If out_dir is not provided, it defaults to the standard VioraEDA library (~/ViospiceLib/sym).
     """
+    if out_dir is None:
+        # Standard cross-platform location for VioSpice symbols
+        out_dir = str(Path.home() / "ViospiceLib" / "sym")
+    
+    # Ensure directory exists before calling CLI
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    
     args = ["symbol-from-subckt", file, out_dir, "--json"]
     if name:
         args.extend(["--name", name])

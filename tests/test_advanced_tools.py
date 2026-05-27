@@ -51,13 +51,9 @@ def test_symbol_from_subckt(tmp_path):
     subckt_file = tmp_path / "test.cir"
     subckt_file.write_text(".subckt TEST_NODE A B C\nR1 A B 1k\n.ends", encoding="utf-8")
     
+    # Test with explicit out_dir
     out_dir = tmp_path / "syms"
-    out_dir.mkdir()
-    
     res = viora_symbol_from_subckt(str(subckt_file), str(out_dir))
     assert res["ok"] is True
     assert res["data"]["count"] >= 1
-    
-    # Check if file was actually created
-    sym_file = out_dir / "test_node.viosym"
-    assert sym_file.exists()
+    assert (out_dir / "test_node.viosym").exists()
