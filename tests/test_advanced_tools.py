@@ -57,3 +57,27 @@ def test_symbol_from_subckt(tmp_path):
     assert res["ok"] is True
     assert res["data"]["count"] >= 1
     assert (out_dir / "test_node.viosym").exists()
+
+def test_symbol_from_subckt_op(tmp_path):
+    """Verify conversion of a SPICE subcircuit to a Viora 'op' (triangle) symbol."""
+    from vioraeda_mcp.server import viora_symbol_from_subckt
+    import json
+    
+    subckt_file = tmp_path / "opamp.cir"
+    subckt_file.write_text(".subckt MY_OP IN- IN+ VCC VEE OUT\n.ends", encoding="utf-8")
+    
+    out_dir = tmp_path / "syms_op"
+    res = viora_symbol_from_subckt(str(subckt_file), str(out_dir), name="MY_OP", type="op")
+    assert res["ok"] is True
+    assert "image_preview_path" in res
+    assert Path(res["image_preview_path"]).exists()
+    assert res["image_preview_path"].endswith(".png")
+    
+    sym_file = out_dir / "my_op.viosym"
+    assert sym_file.exists()
+    
+    # Verify polygon primitive exists (the triangle)
+    content = json.loads(sym_file.read_text())
+    primitives = content.get("primitives", [])
+    assert any(p["type"] == "polygon" for p in primitives)
+    assert any(p["type"] == "text" and p["text"] == "+" for p in primitives)

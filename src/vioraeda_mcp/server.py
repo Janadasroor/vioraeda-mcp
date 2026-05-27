@@ -246,22 +246,44 @@ def viora_symbol_validate(file: str) -> dict:
     return run_viora_command(["symbol-validate", file, "--json"], json_out=True)
 
 @mcp.tool()
-def viora_symbol_from_subckt(file: str, out_dir: Optional[str] = None, name: Optional[str] = None) -> dict:
+def viora_symbol_from_subckt(
+    file: str, 
+    out_dir: Optional[str] = None, 
+    name: Optional[str] = None,
+    type: str = "ic"
+) -> dict:
     """Generate Viora symbols (.viosym) from SPICE .subckt definitions.
     This creates a visual symbol with automatic pin placement and mapping.
-    If out_dir is not provided, it defaults to the standard VioraEDA library (~/ViospiceLib/sym).
+    It also returns a path to a temporary image preview of the generated symbol.
+    
+    Supported types:
+    - 'ic': Standard rectangular body with a Pin 1 dot indicator.
+    - 'op': Classic triangular Operational Amplifier shape.
     """
     if out_dir is None:
-        # Standard cross-platform location for VioSpice symbols
         out_dir = str(Path.home() / "ViospiceLib" / "sym")
     
-    # Ensure directory exists before calling CLI
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     
-    args = ["symbol-from-subckt", file, out_dir, "--json"]
+    args = ["symbol-from-subckt", file, out_dir, "--json", "--symbol-type", type]
     if name:
         args.extend(["--name", name])
-    return run_viora_command(args, json_out=True)
+    
+    res = run_viora_command(args, json_out=True)
+    
+    # If a specific symbol was requested and generated, provide a visual preview
+    if res.get("ok") and name:
+        sym_file = Path(out_dir) / f"{name.lower()}.viosym"
+        if sym_file.exists():
+            # Create a temporary image path
+            tmp_fd, tmp_img = tempfile.mkstemp(suffix=".png", prefix=f"viora_sym_{name.lower()}_")
+            os.close(tmp_fd)
+            
+            render_res = run_viora_command(["symbol-render", str(sym_file), tmp_img, "--scale", "4.0"])
+            if render_res.get("ok"):
+                res["image_preview_path"] = tmp_img
+                
+    return res
 
 @mcp.tool()
 def viora_bom_generate(file: str) -> dict:
