@@ -54,3 +54,7 @@ Contributions are welcome! Please see the [VioraEDA Website](https://vioraeda.co
 ## 📜 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**VioraEDA-MCP** is a part of the [VioraEDA](https://vioraeda.com) ecosystem. Empowering the next generation of electronic design automation with AI.
