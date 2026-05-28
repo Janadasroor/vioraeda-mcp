@@ -155,3 +155,9 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+
+# Other
+*.png
+*.jpg
+*.jpeg
+*.log

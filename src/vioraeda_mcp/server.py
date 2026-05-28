@@ -166,6 +166,46 @@ def viora_write_file(path: str, content: str) -> dict:
 # --- MCP Tool Definitions: Design & Symbols ---
 
 @mcp.tool()
+def viora_symbol_search(query: str) -> dict:
+    """Search for components by name, description, or tags using the fast metadata index."""
+    return run_viora_command(["symbol-search", query, "--json"], json_out=True)
+
+@mcp.tool()
+def viora_symbol_batch_generate(
+    requests: List[Dict[str, Any]], 
+    out_dir: Optional[str] = None,
+    preview_scale: float = 4.0
+) -> dict:
+    """Bulk generate symbols from multiple SPICE subcircuit definitions.
+    
+    'requests' is a list of objects containing:
+    - 'file': path to .cir/subckt file
+    - 'name': symbol name (optional)
+    - 'type': 'ic', 'op', 'npn', 'pnp', 'nmos', 'pmos', 'diode' (default: 'ic')
+    """
+    results = []
+    for req in requests:
+        file = req.get("file")
+        if not file: continue
+        name = req.get("name")
+        stype = req.get("type", "ic")
+        # Use our existing viora_symbol_from_subckt logic but allow overriding scale
+        res = viora_symbol_from_subckt(file, out_dir=out_dir, name=name, type=stype, preview_scale=preview_scale)
+        results.append({
+            "request": req,
+            "ok": res.get("ok", False),
+            "error": res.get("error"),
+            "image_preview_path": res.get("image_preview_path")
+        })
+    
+    return {
+        "ok": True,
+        "results": results,
+        "count": len(results),
+        "success_count": sum(1 for r in results if r["ok"])
+    }
+
+@mcp.tool()
 def viora_symbol_list(path: str = ".") -> dict:
     """Query the symbol library for available components."""
     return run_viora_command(["symbol-list", path, "--json"], json_out=True)
@@ -250,7 +290,8 @@ def viora_symbol_from_subckt(
     file: str, 
     out_dir: Optional[str] = None, 
     name: Optional[str] = None,
-    type: str = "ic"
+    type: str = "ic",
+    preview_scale: float = 4.0
 ) -> dict:
     """Generate Viora symbols (.viosym) from SPICE .subckt definitions.
     This creates a visual symbol with automatic pin placement and mapping.
@@ -259,6 +300,9 @@ def viora_symbol_from_subckt(
     Supported types:
     - 'ic': Standard rectangular body with a Pin 1 dot indicator.
     - 'op': Classic triangular Operational Amplifier shape.
+    - 'npn' / 'pnp': Bipolar transistors with 'perfect' geometry.
+    - 'nmos' / 'pmos': MOSFET transistors with dashed channel and bulk arrow.
+    - 'diode': Standard semiconductor diode.
     """
     if out_dir is None:
         out_dir = str(Path.home() / "ViospiceLib" / "sym")
@@ -279,7 +323,7 @@ def viora_symbol_from_subckt(
             tmp_fd, tmp_img = tempfile.mkstemp(suffix=".png", prefix=f"viora_sym_{name.lower()}_")
             os.close(tmp_fd)
             
-            render_res = run_viora_command(["symbol-render", str(sym_file), tmp_img, "--scale", "4.0"])
+            render_res = run_viora_command(["symbol-render", str(sym_file), tmp_img, "--scale", str(preview_scale)])
             if render_res.get("ok"):
                 res["image_preview_path"] = tmp_img
                 
@@ -322,8 +366,17 @@ def viospice_netlist_run(
     signals: Optional[List[str]] = None,
     robust: bool = False,
     compat: bool = True,
+    auto_heal: bool = True,
 ) -> dict:
-    """Execute a SPICE/VioSpice simulation."""
+    """Execute a SPICE/VioSpice simulation.
+    
+    ### B-Source Syntax Cheat Sheet (Essential for Convergence):
+    - Use ternary: `V = (condition) ? (val_if_true) : (val_if_false)`
+    - NO logical '&' or '|' in expressions; use nested ternaries instead.
+    - Avoid sharp steps: use `LIMIT(val, min, max)` or small transition ramps.
+    - High-gain feedback: always add a small damping capacitor (e.g., 10n) to FB nodes.
+    - Transformer/Switching: add small series resistance (e.g., 0.01) to avoid 'Timestep too small'.
+    """
     args = ["netlist-run", "--json"]
     temp_file = None
     if cir:
@@ -351,7 +404,28 @@ def viospice_netlist_run(
         args.append("--compat")
 
     try:
-        return run_viora_command(args, json_out=True)
+        res = run_viora_command(args, json_out=True)
+        
+        # Auto-Heal: If simulation fails due to convergence, retry with 'uic'
+        if auto_heal and not res.get("ok"):
+            err_msg = res.get("error", "").lower()
+            if "timestep too small" in err_msg or "convergence" in err_msg:
+                logger.info("Convergence failure detected. Retrying with 'uic'...")
+                # We need to re-prepare args or add uic to the .tran line if possible
+                # But 'viora netlist-run' doesn't have an explicit --uic flag yet.
+                # However, many netlists provided in 'cir' might already have it.
+                # If 'cir' was provided, we can try to append '.options uic'
+                if cir and ".tran" in cir and "uic" not in cir:
+                    new_cir = cir.replace(".tran", ".tran") + " uic\n" # simplified
+                    # Let's just try to pass a raw command if the CLI supported it.
+                    # Since it doesn't, we'll suggest it in the error for now, 
+                    # OR we can manually edit the temp file.
+                    if temp_file:
+                        content = Path(temp_file).read_text()
+                        if ".tran" in content and "uic" not in content:
+                            Path(temp_file).write_text(content.replace(".tran", ".tran") + " uic", encoding="utf-8")
+                            res = run_viora_command(args, json_out=True)
+        return res
     finally:
         if temp_file and os.path.exists(temp_file):
             os.remove(temp_file)
@@ -385,6 +459,24 @@ def viospice_netlist_to_schematic(file: str, out: str = None) -> dict:
 def viospice_raw_info(file: str) -> dict:
     """Get signal metadata from a .raw simulation binary."""
     return run_viora_command(["raw-info", file, "--json"], json_out=True)
+
+@mcp.tool()
+def viospice_raw_stats(
+    file: str, 
+    signals: Optional[List[str]] = None, 
+    range: Optional[str] = None
+) -> dict:
+    """Retrieve summary statistics (min, max, avg, rms) for simulation signals.
+    Use this to verify results without downloading large raw data sets.
+    'range' format: 't0:t1' (e.g., '8m:10m')
+    """
+    args = ["raw-stats", file]
+    if signals:
+        for s in signals:
+            args.extend(["--signal", s])
+    if range:
+        args.extend(["--range", range])
+    return run_viora_command(args, json_out=True)
 
 @mcp.tool()
 def viospice_raw_export(file: str, out: str, format: str = "json") -> dict:
