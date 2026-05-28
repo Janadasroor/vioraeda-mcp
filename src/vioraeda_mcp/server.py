@@ -589,13 +589,27 @@ async def viora_ui_load_results(path: str) -> dict:
 
 @mcp.tool()
 async def viora_ui_get_active_tab() -> dict:
-    """Get the active editor tab name."""
-    code = (
-        "from PySide6.QtWidgets import QApplication, QTabWidget; "
-        "print([w.findChild(QTabWidget).tabText(w.findChild(QTabWidget).currentIndex()) "
-        "for w in QApplication.topLevelWidgets() if w.isVisible() and w.findChild(QTabWidget)][0])"
-    )
-    return await ui_query_async(code)
+    """Get detailed metadata about the active editor tab (Uses vspice.session)."""
+    code = "import vspice.session; vspice.session.print_active_tab_json()"
+    res = await ui_query_async(code)
+    if res.get("ok"):
+        try:
+            return {"ok": True, "active_tab": json.loads(res["output"])}
+        except:
+            return {"ok": False, "error": "Failed to parse session data", "raw": res["output"]}
+    return res
+
+@mcp.tool()
+async def viora_ui_get_session_state() -> dict:
+    """Query the complete GUI session state (Uses vspice.session)."""
+    code = "import vspice.session; vspice.session.print_session_state_json()"
+    res = await ui_query_async(code)
+    if res.get("ok"):
+        try:
+            return {"ok": True, "session": json.loads(res["output"])}
+        except:
+            return {"ok": False, "error": "Failed to parse session data", "raw": res["output"]}
+    return res
 
 @mcp.tool()
 def viora_get_docs(topic: str = "all") -> dict:
